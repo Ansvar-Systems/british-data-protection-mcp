@@ -116,6 +116,11 @@ const TOOLS = [
     inputSchema: { type: "object" as const, properties: {}, required: [] },
   },
   {
+    name: "gb_dp_list_sources",
+    description: "List all data sources used by this MCP server, with URLs and descriptions.",
+    inputSchema: { type: "object" as const, properties: {}, required: [] },
+  },
+  {
     name: "gb_dp_about",
     description: "Return metadata about this MCP server: version, data source, coverage, and tool list.",
     inputSchema: { type: "object" as const, properties: {}, required: [] },
@@ -219,6 +224,38 @@ function createMcpServer(): Server {
         case "gb_dp_list_topics": {
           const topics = listTopics();
           return textContent({ topics, count: topics.length });
+        }
+
+        case "gb_dp_list_sources": {
+          return textContent({
+            sources: [
+              {
+                name: "ICO (Information Commissioner's Office)",
+                url: "https://ico.org.uk/",
+                description: "Enforcement decisions, monetary penalties, reprimands",
+              },
+              {
+                name: "UK GDPR (retained EU law)",
+                url: "https://www.legislation.gov.uk/",
+                description: "UK General Data Protection Regulation",
+              },
+              {
+                name: "Data Protection Act 2018",
+                url: "https://www.legislation.gov.uk/",
+                description: "Primary UK data protection statute",
+              },
+              {
+                name: "PECR (Privacy and Electronic Communications Regulations)",
+                url: "https://www.legislation.gov.uk/",
+                description: "Marketing, cookies, communications",
+              },
+              {
+                name: "ICO Guidance Collection",
+                url: "https://ico.org.uk/for-organisations/",
+                description: "Codes of practice, detailed guidance, recommendations",
+              },
+            ],
+          });
         }
 
         case "gb_dp_about": {
