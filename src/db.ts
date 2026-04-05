@@ -13,7 +13,7 @@ import Database from "better-sqlite3";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
-const DB_PATH = process.env["ICO_DB_PATH"] ?? "data/ico.db";
+export const DB_PATH = process.env["ICO_DB_PATH"] ?? "data/ico.db";
 
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS decisions (
