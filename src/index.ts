@@ -15,7 +15,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
@@ -25,8 +25,8 @@ import {
   searchGuidelines,
   getGuideline,
   listTopics,
+  DB_PATH,
 } from "./db.js";
-import { buildCitation } from './citation.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -43,6 +43,17 @@ try {
 
 const SERVER_NAME = "british-data-protection-mcp";
 
+// --- _meta block (golden-standard requirement) --------------------------------
+
+const META = {
+  disclaimer:
+    "This tool is not regulatory or legal advice. Verify all references against primary sources before making compliance decisions.",
+  copyright: "© Information Commissioner's Office (ICO). Open Government Licence v3.0.",
+  source_url: "https://ico.org.uk/",
+  data_age:
+    "Database may lag official publications. Call gb_dp_check_data_freshness for the last-updated timestamp.",
+};
+
 // --- Tool definitions ---------------------------------------------------------
 
 const TOOLS = [
@@ -53,21 +64,38 @@ const TOOLS = [
     inputSchema: {
       type: "object" as const,
       properties: {
-        query: { type: "string", description: "Search query (e.g., 'consent cookies', 'data breach', 'British Airways', 'Clearview')" },
-        type: { type: "string", enum: ["monetary_penalty", "enforcement_notice", "undertaking", "reprimand"], description: "Filter by decision type. Optional." },
-        topic: { type: "string", description: "Filter by topic ID (e.g., 'consent', 'children', 'direct_marketing', 'international_transfers'). Optional." },
-        limit: { type: "number", description: "Maximum number of results to return. Defaults to 20." },
+        query: {
+          type: "string",
+          description: "Search query (e.g., 'consent cookies', 'data breach', 'British Airways', 'Clearview')",
+        },
+        type: {
+          type: "string",
+          enum: ["monetary_penalty", "enforcement_notice", "undertaking", "reprimand"],
+          description: "Filter by decision type. Optional.",
+        },
+        topic: {
+          type: "string",
+          description: "Filter by topic ID (e.g., 'consent', 'children', 'direct_marketing', 'international_transfers'). Optional.",
+        },
+        limit: {
+          type: "number",
+          description: "Maximum number of results to return. Defaults to 20.",
+        },
       },
       required: ["query"],
     },
   },
   {
     name: "gb_dp_get_decision",
-    description: "Get a specific ICO decision by reference number (e.g., 'ICO-MPN-2020-001', 'ENF-2021-BA').",
+    description:
+      "Get a specific ICO decision by reference number (e.g., 'ICO-MPN-2020-001', 'ENF-2021-BA').",
     inputSchema: {
       type: "object" as const,
       properties: {
-        reference: { type: "string", description: "ICO decision reference number" },
+        reference: {
+          type: "string",
+          description: "ICO decision reference number",
+        },
       },
       required: ["reference"],
     },
@@ -79,39 +107,79 @@ const TOOLS = [
     inputSchema: {
       type: "object" as const,
       properties: {
-        query: { type: "string", description: "Search query (e.g., 'DPIA', 'legitimate interest', 'children age appropriate', 'subject access request')" },
-        type: { type: "string", enum: ["guide", "code_of_practice", "recommendation", "opinion"], description: "Filter by guidance type. Optional." },
-        topic: { type: "string", description: "Filter by topic ID (e.g., 'children', 'consent', 'direct_marketing', 'subject_access'). Optional." },
-        limit: { type: "number", description: "Maximum number of results to return. Defaults to 20." },
+        query: {
+          type: "string",
+          description: "Search query (e.g., 'DPIA', 'legitimate interest', 'children age appropriate', 'subject access request')",
+        },
+        type: {
+          type: "string",
+          enum: ["guide", "code_of_practice", "recommendation", "opinion"],
+          description: "Filter by guidance type. Optional.",
+        },
+        topic: {
+          type: "string",
+          description: "Filter by topic ID (e.g., 'children', 'consent', 'direct_marketing', 'subject_access'). Optional.",
+        },
+        limit: {
+          type: "number",
+          description: "Maximum number of results to return. Defaults to 20.",
+        },
       },
       required: ["query"],
     },
   },
   {
     name: "gb_dp_get_guideline",
-    description: "Get a specific ICO guidance document by its database ID.",
+    description:
+      "Get a specific ICO guidance document by its database ID.",
     inputSchema: {
       type: "object" as const,
       properties: {
-        id: { type: "number", description: "Guideline database ID (from gb_dp_search_guidelines results)" },
+        id: {
+          type: "number",
+          description: "Guideline database ID (from gb_dp_search_guidelines results)",
+        },
       },
       required: ["id"],
     },
   },
   {
     name: "gb_dp_list_topics",
-    description: "List all covered data protection topics with English names. Use topic IDs to filter decisions and guidelines.",
-    inputSchema: { type: "object" as const, properties: {}, required: [] },
+    description:
+      "List all covered data protection topics with English names. Use topic IDs to filter decisions and guidelines.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
   },
   {
     name: "gb_dp_list_sources",
     description: "List all data sources used by this MCP server, with URLs and descriptions.",
-    inputSchema: { type: "object" as const, properties: {}, required: [] },
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
   },
   {
     name: "gb_dp_about",
     description: "Return metadata about this MCP server: version, data source, coverage, and tool list.",
-    inputSchema: { type: "object" as const, properties: {}, required: [] },
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "gb_dp_check_data_freshness",
+    description:
+      "Check when the ICO database was last updated. Returns the database file modification time and whether the database file exists.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
   },
 ];
 
@@ -124,7 +192,9 @@ const SearchDecisionsArgs = z.object({
   limit: z.number().int().positive().max(100).optional(),
 });
 
-const GetDecisionArgs = z.object({ reference: z.string().min(1) });
+const GetDecisionArgs = z.object({
+  reference: z.string().min(1),
+});
 
 const SearchGuidelinesArgs = z.object({
   query: z.string().min(1),
@@ -133,16 +203,26 @@ const SearchGuidelinesArgs = z.object({
   limit: z.number().int().positive().max(100).optional(),
 });
 
-const GetGuidelineArgs = z.object({ id: z.number().int().positive() });
+const GetGuidelineArgs = z.object({
+  id: z.number().int().positive(),
+});
 
 // --- Helper ------------------------------------------------------------------
 
 function textContent(data: unknown) {
-  return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
+  return {
+    _meta: META,
+    content: [
+      { type: "text" as const, text: JSON.stringify(data, null, 2) },
+    ],
+  };
 }
 
 function errorContent(message: string) {
-  return { content: [{ type: "text" as const, text: message }], isError: true as const };
+  return {
+    content: [{ type: "text" as const, text: message }],
+    isError: true as const,
+  };
 }
 
 // --- Server setup ------------------------------------------------------------
@@ -152,7 +232,9 @@ const server = new Server(
   { capabilities: { tools: {} } },
 );
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: TOOLS,
+}));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args = {} } = request.params;
@@ -161,7 +243,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     switch (name) {
       case "gb_dp_search_decisions": {
         const parsed = SearchDecisionsArgs.parse(args);
-        const results = searchDecisions({ query: parsed.query, type: parsed.type, topic: parsed.topic, limit: parsed.limit });
+        const results = searchDecisions({
+          query: parsed.query,
+          type: parsed.type,
+          topic: parsed.topic,
+          limit: parsed.limit,
+        });
         return textContent({ results, count: results.length });
       }
 
@@ -171,21 +258,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (!decision) {
           return errorContent(`Decision not found: ${parsed.reference}`);
         }
-        return textContent({
-          ...(typeof decision === 'object' ? decision : { data: decision }),
-          _citation: buildCitation(
-            decision.reference || parsed.reference,
-            decision.title || decision.subject || parsed.reference,
-            'gb_dp_get_decision',
-            { reference: parsed.reference },
-            decision.url || decision.source_url || null,
-          ),
-        });
+        return textContent(decision);
       }
 
       case "gb_dp_search_guidelines": {
         const parsed = SearchGuidelinesArgs.parse(args);
-        const results = searchGuidelines({ query: parsed.query, type: parsed.type, topic: parsed.topic, limit: parsed.limit });
+        const results = searchGuidelines({
+          query: parsed.query,
+          type: parsed.type,
+          topic: parsed.topic,
+          limit: parsed.limit,
+        });
         return textContent({ results, count: results.length });
       }
 
@@ -195,16 +278,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (!guideline) {
           return errorContent(`Guideline not found: id=${parsed.id}`);
         }
-        return textContent({
-          ...(typeof guideline === 'object' ? guideline : { data: guideline }),
-          _citation: buildCitation(
-            guideline.reference || guideline.id?.toString() || String(parsed.id),
-            guideline.title || guideline.name || `Guideline ${parsed.id}`,
-            'gb_dp_get_guideline',
-            { id: String(parsed.id) },
-            guideline.url || guideline.source_url || null,
-          ),
-        });
+        return textContent(guideline);
       }
 
       case "gb_dp_list_topics": {
@@ -215,19 +289,41 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "gb_dp_list_sources": {
         return textContent({
           sources: [
-            { name: "ICO (Information Commissioner's Office)", url: "https://ico.org.uk/", description: "Enforcement decisions, monetary penalties, reprimands" },
-            { name: "UK GDPR (retained EU law)", url: "https://www.legislation.gov.uk/", description: "UK General Data Protection Regulation" },
-            { name: "Data Protection Act 2018", url: "https://www.legislation.gov.uk/", description: "Primary UK data protection statute" },
-            { name: "PECR (Privacy and Electronic Communications Regulations)", url: "https://www.legislation.gov.uk/", description: "Marketing, cookies, communications" },
-            { name: "ICO Guidance Collection", url: "https://ico.org.uk/for-organisations/", description: "Codes of practice, detailed guidance, recommendations" },
+            {
+              name: "ICO (Information Commissioner's Office)",
+              url: "https://ico.org.uk/",
+              description: "Enforcement decisions, monetary penalties, reprimands",
+            },
+            {
+              name: "UK GDPR (retained EU law)",
+              url: "https://www.legislation.gov.uk/",
+              description: "UK General Data Protection Regulation",
+            },
+            {
+              name: "Data Protection Act 2018",
+              url: "https://www.legislation.gov.uk/",
+              description: "Primary UK data protection statute",
+            },
+            {
+              name: "PECR (Privacy and Electronic Communications Regulations)",
+              url: "https://www.legislation.gov.uk/",
+              description: "Marketing, cookies, communications",
+            },
+            {
+              name: "ICO Guidance Collection",
+              url: "https://ico.org.uk/for-organisations/",
+              description: "Codes of practice, detailed guidance, recommendations",
+            },
           ],
         });
       }
 
       case "gb_dp_about": {
         return textContent({
-          name: SERVER_NAME, version: pkgVersion,
-          description: "ICO (Information Commissioner's Office) MCP server. Provides access to UK data protection authority decisions, monetary penalty notices, enforcement notices, and official guidance documents including codes of practice.",
+          name: SERVER_NAME,
+          version: pkgVersion,
+          description:
+            "ICO (Information Commissioner's Office) MCP server. Provides access to UK data protection authority decisions, monetary penalty notices, enforcement notices, and official guidance documents including codes of practice.",
           data_source: "ICO (https://ico.org.uk/)",
           coverage: {
             decisions: "ICO monetary penalty notices, enforcement notices, undertakings, and reprimands",
@@ -235,6 +331,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             topics: "Consent, children, direct_marketing, data_sharing, international_transfers, subject_access, cookies, breach_notification, legitimate_interest",
           },
           tools: TOOLS.map((t) => ({ name: t.name, description: t.description })),
+        });
+      }
+
+      case "gb_dp_check_data_freshness": {
+        let last_updated: string | null = null;
+        let db_exists = false;
+        try {
+          const stat = statSync(DB_PATH);
+          last_updated = stat.mtime.toISOString();
+          db_exists = true;
+        } catch {
+          // DB file not found
+        }
+        return textContent({
+          db_path: DB_PATH,
+          db_exists,
+          last_updated,
+          check_timestamp: new Date().toISOString(),
         });
       }
 

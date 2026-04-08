@@ -12,7 +12,7 @@
  */
 
 import { createServer } from "node:http";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
@@ -29,6 +29,7 @@ import {
   searchGuidelines,
   getGuideline,
   listTopics,
+  DB_PATH,
 } from "./db.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -46,6 +47,17 @@ try {
 } catch {
   // fallback
 }
+
+// --- _meta block (golden-standard requirement) --------------------------------
+
+const META = {
+  disclaimer:
+    "This tool is not regulatory or legal advice. Verify all references against primary sources before making compliance decisions.",
+  copyright: "© Information Commissioner's Office (ICO). Open Government Licence v3.0.",
+  source_url: "https://ico.org.uk/",
+  data_age:
+    "Database may lag official publications. Call gb_dp_check_data_freshness for the last-updated timestamp.",
+};
 
 // --- Tool definitions (shared with index.ts) ---------------------------------
 
@@ -125,6 +137,12 @@ const TOOLS = [
     description: "Return metadata about this MCP server: version, data source, coverage, and tool list.",
     inputSchema: { type: "object" as const, properties: {}, required: [] },
   },
+  {
+    name: "gb_dp_check_data_freshness",
+    description:
+      "Check when the ICO database was last updated. Returns the database file modification time and whether the database file exists.",
+    inputSchema: { type: "object" as const, properties: {}, required: [] },
+  },
 ];
 
 // --- Zod schemas -------------------------------------------------------------
@@ -168,6 +186,7 @@ function createMcpServer(): Server {
 
     function textContent(data: unknown) {
       return {
+        _meta: META,
         content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
       };
     }
@@ -266,6 +285,24 @@ function createMcpServer(): Server {
               "ICO (Information Commissioner's Office) MCP server. Provides access to UK data protection authority decisions, monetary penalty notices, enforcement notices, and official guidance documents.",
             data_source: "ICO (https://ico.org.uk/)",
             tools: TOOLS.map((t) => ({ name: t.name, description: t.description })),
+          });
+        }
+
+        case "gb_dp_check_data_freshness": {
+          let last_updated: string | null = null;
+          let db_exists = false;
+          try {
+            const stat = statSync(DB_PATH);
+            last_updated = stat.mtime.toISOString();
+            db_exists = true;
+          } catch {
+            // DB file not found
+          }
+          return textContent({
+            db_path: DB_PATH,
+            db_exists,
+            last_updated,
+            check_timestamp: new Date().toISOString(),
           });
         }
 
