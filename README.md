@@ -90,17 +90,18 @@ npx @ansvar/british-data-protection-mcp
 
 ---
 
-## Available Tools (7)
+## Available Tools (8)
 
 | Tool | Description |
 |------|-------------|
-| `gb_dp_search_decisions` | Full-text search across ICO enforcement decisions (monetary penalty notices, enforcement notices, undertakings, repri... |
-| `gb_dp_get_decision` | Get a specific ICO decision by reference number (e.g., |
-| `gb_dp_search_guidelines` | Search ICO guidance documents: guides, codes of practice, and recommendations. Covers UK GDPR implementation, DPIA me... |
+| `gb_dp_search_decisions` | Full-text search across ICO enforcement decisions (monetary penalty notices, enforcement notices, undertakings, reprimands). |
+| `gb_dp_get_decision` | Get a specific ICO decision by reference number (e.g., `ICO-MPN-2020-001`). |
+| `gb_dp_search_guidelines` | Search ICO guidance documents: guides, codes of practice, and recommendations. Covers UK GDPR, DPIA, Children's Code, and more. |
 | `gb_dp_get_guideline` | Get a specific ICO guidance document by its database ID. |
 | `gb_dp_list_topics` | List all covered data protection topics with English names. Use topic IDs to filter decisions and guidelines. |
 | `gb_dp_list_sources` | List all data sources used by this MCP server, with URLs and descriptions. |
 | `gb_dp_about` | Return metadata about this MCP server: version, data source, coverage, and tool list. |
+| `gb_dp_check_data_freshness` | Check when the ICO database was last updated. Returns last-modified timestamp and whether the database file exists. |
 
 All tools return structured data with source references and timestamps.
 
@@ -118,7 +119,7 @@ All content is sourced from official British regulatory publications:
 - Freshness checks run via GitHub Actions workflows
 - Last-updated timestamps in tool responses indicate data age
 
-See `sources.yml` for full provenance metadata.
+See `data/coverage.json` for full provenance metadata and `COVERAGE.md` for human-readable coverage notes.
 
 ---
 
@@ -181,8 +182,8 @@ npx @anthropic/mcp-inspector node dist/index.js   # Test with MCP Inspector
 ### Data Management
 
 ```bash
-npm run build:db       # Rebuild SQLite database from seed data
-npm run check-updates  # Check for new regulatory data
+npm run seed    # Populate SQLite database with sample ICO data
+npm run ingest  # Full ingestion from ICO sources (requires network)
 ```
 
 ---
@@ -219,7 +220,7 @@ Apache License 2.0. See [LICENSE](./LICENSE) for details.
 
 ### Data Licenses
 
-Regulatory data sourced from official government publications. See `sources.yml` for per-source licensing details.
+Regulatory data sourced from official government publications under the Open Government Licence v3.0. See `data/coverage.json` for per-source licensing details.
 
 ---
 
